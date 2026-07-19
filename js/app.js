@@ -202,7 +202,7 @@
     pendingSouvenir.lat = pos.lat;
     pendingSouvenir.lng = pos.lng;
 
-    const mosaic = await MapModule.fetchMapImage(pos.lat, pos.lng);
+    const mosaic = await MapModule.fetchMapImage(pos.lat, pos.lng, 18);
     if (!mosaic){
       metaEl.textContent = `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}`;
       return;

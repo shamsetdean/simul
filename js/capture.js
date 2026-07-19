@@ -243,7 +243,7 @@ const Capture = {
 
   /** Miniature carte + point bleu a l'emplacement GPS exact, sans contour. */
   _drawMapInset(ctx, canvas, mapCanvas){
-    const size = canvas.width * 0.30;
+    const size = canvas.width * 0.36;
     const pad = canvas.width * 0.03;
     const x = pad;
     const y = canvas.height - size - pad;

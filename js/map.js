@@ -150,7 +150,7 @@ const MapModule = {
   /** Recadrage carre centre sur les coordonnees GPS exactes, pour
    *  l'incrustation directe dans la photo finale (pas de teinte assombrie,
    *  la lisibilite du point GPS prime). */
-  cropToInset(mosaicCanvas, size = 260){
+  cropToInset(mosaicCanvas, size = 320){
     if (!mosaicCanvas) return null;
     const out = document.createElement('canvas');
     out.width = size; out.height = size;
