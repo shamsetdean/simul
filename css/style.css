@@ -314,6 +314,16 @@ svg.icon{
   background: var(--bg-card);
   cursor: pointer;
 }
+.map-strip.status-only{
+  height: auto;
+  border: none;
+  background: none;
+  display:flex; justify-content:center;
+}
+.map-strip.status-only .pin{ display:none; }
+.map-strip.status-only .meta{
+  position: static;
+}
 .map-strip img{
   width:100%; height:100%; object-fit: cover;
 }
