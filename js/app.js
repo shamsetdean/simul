@@ -150,6 +150,10 @@
     currentTags = [];
     renderTagChips();
 
+    $('#review-datetime').textContent = new Date(pendingSouvenir.createdAt).toLocaleString('fr-FR', {
+      day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit'
+    });
+
     const wrap = $('#review-media-wrap');
     wrap.innerHTML = '';
     if (kind === 'photo'){
