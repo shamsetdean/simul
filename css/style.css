@@ -177,6 +177,13 @@ svg.icon{
 }
 .capture-badge.alt .dot{ background: var(--bleu); }
 
+#btn-preview-swap{
+  background: rgba(14,15,26,.6);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+}
+#btn-preview-swap:active{ transform: scale(.9); }
+
 .capture-controls{
   position: absolute; left:0; right:0; bottom: 18px; z-index:4;
   display:flex; align-items:center; justify-content:center; gap: 28px;
