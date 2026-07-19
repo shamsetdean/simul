@@ -150,14 +150,21 @@ svg.icon{
   object-fit: cover;
   background: #000;
 }
-#video-main{ inset: 0; width: 100%; height: 100%; }
-#video-pip{
+#video-main{ inset: 0; width: 100%; height: 100%; transition: opacity .15s ease; }
+#video-main.updating{ opacity: .55; }
+#video-pip, #pip-canvas{
   width: 30%; aspect-ratio: 3/4;
   top: 14px; right: 14px;
   border-radius: 14px;
   border: 2px solid rgba(238,234,247,.85);
   box-shadow: 0 8px 24px rgba(0,0,0,.45);
   z-index: 3;
+}
+#video-pip{ position: absolute; object-fit: cover; }
+#pip-canvas{
+  position: absolute;
+  object-fit: cover;
+  background: var(--bg-card);
 }
 
 .capture-badge{
@@ -177,58 +184,65 @@ svg.icon{
 }
 .capture-badge.alt .dot{ background: var(--bleu); }
 
-#btn-preview-swap{
-  background: rgba(14,15,26,.6);
-  backdrop-filter: blur(6px);
-  border: 1px solid var(--border);
+/* ---------- glass controls (façon écran d'appel) ---------- */
+.glass-controls{
+  display:flex;
+  flex-wrap: wrap;
+  justify-content:center;
+  align-items:flex-start;
+  gap: 22px 26px;
+  padding: 22px 24px 30px;
 }
-#btn-preview-swap:active{ transform: scale(.9); }
-
-.capture-controls{
-  position: absolute; left:0; right:0; bottom: 18px; z-index:4;
-  display:flex; align-items:center; justify-content:center; gap: 28px;
+.glass-btn{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:9px;
+  width: 68px;
 }
-.shutter{
-  width: 74px; height: 74px;
-  border-radius: 50%;
-  background: var(--gradient);
+.glass-btn .circle{
+  width:64px; height:64px;
+  border-radius:50%;
   display:flex; align-items:center; justify-content:center;
-  box-shadow: 0 10px 30px -8px rgba(139,111,232,.6);
-  position: relative;
+  background: rgba(255,255,255,.06);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 10px 26px -8px rgba(0,0,0,.5);
+  color: var(--ink);
+  transition: transform .15s ease, background .15s ease, border-color .15s ease;
 }
-.shutter::before{
-  content:'';
-  position:absolute; inset: 5px;
-  border-radius: 50%;
-  border: 2px solid var(--bg);
+.glass-btn:active .circle{ transform: scale(.92); }
+.glass-btn .label{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
 }
-.shutter:active{ transform: scale(.95); }
-.shutter.recording{ animation: pulse 1.2s ease-in-out infinite; }
+.glass-btn.active .circle{
+  background: var(--gradient);
+  border-color: transparent;
+  color: var(--bg);
+}
+.glass-btn.active .label{ color: var(--ink); }
+.glass-btn:disabled{ opacity: .5; }
+
+.glass-btn.shutter-glass .circle{
+  width:74px; height:74px;
+  background: var(--gradient);
+  border-color: transparent;
+  color: var(--bg);
+  box-shadow: 0 12px 30px -8px rgba(139,111,232,.6);
+}
+.glass-btn.shutter-glass .circle svg{ fill: currentColor; }
+.glass-btn.shutter-glass.recording .circle{
+  background: var(--danger);
+  animation: pulse 1.2s ease-in-out infinite;
+}
 @keyframes pulse{
   0%,100%{ box-shadow: 0 10px 30px -8px rgba(232,96,122,.65); }
   50%{ box-shadow: 0 10px 44px -6px rgba(232,96,122,.9); }
-}
-
-.mode-toggle{
-  display:flex; gap: 4px;
-  padding: 4px;
-  border-radius: 999px;
-  background: rgba(14,15,26,.55);
-  backdrop-filter: blur(6px);
-  border: 1px solid var(--border);
-}
-.mode-toggle button{
-  padding: 8px 16px;
-  border-radius: 999px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: .06em;
-  color: var(--ink-dim);
-}
-.mode-toggle button.active{
-  background: var(--gradient);
-  color: var(--bg);
-  font-weight: 700;
 }
 
 /* ---------- review / detail sheet ---------- */
