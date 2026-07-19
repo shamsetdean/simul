@@ -121,9 +121,11 @@
       if (Capture.mode === 'alterne'){
         toast('Avant figee sur le dernier apercu pendant le clip', 2600);
       }
-      Capture.startVideoRecording();
-      recordingVideo = true;
       shutter.classList.add('recording');
+      shutter.disabled = true;
+      await Capture.startVideoRecording();
+      shutter.disabled = false;
+      recordingVideo = true;
     } else {
       shutter.classList.remove('recording');
       const blob = await Capture.stopVideoRecording();
@@ -163,16 +165,20 @@
     }
 
     showView('review');
-    resolveLocation();
+    await resolveLocation();
     await refreshTagSuggestions();
 
     // Enregistrement dans la phototheque : ouvre la feuille de partage
-    // native au plus tot (l'API exige un geste utilisateur recent — le
-    // shutter tap qui a lance toute cette sequence). Aucun navigateur ne
-    // permet d'ecrire silencieusement dans la pellicule ; ceci est le plus
-    // proche possible, un seul tap pour confirmer "Enregistrer".
+    // native une fois le lieu resolu, pour que la carte parte avec la
+    // photo/video. Aucun navigateur ne permet d'ecrire silencieusement
+    // dans la pellicule ; ceci est le plus proche possible, un seul tap
+    // pour confirmer "Enregistrer".
     const ext = kind === 'photo' ? 'webp' : 'webm';
-    ShareModule.saveToLibrary(mediaBlob, `simul-souvenir.${ext}`).then(ok => {
+    const shareItems = [{ blob: mediaBlob, name: `simul-souvenir.${ext}` }];
+    if (pendingSouvenir.mapImageBlob){
+      shareItems.push({ blob: pendingSouvenir.mapImageBlob, name: 'simul-lieu.webp' });
+    }
+    ShareModule.saveToLibrary(shareItems).then(ok => {
       if (ok) toast('Enregistre dans ta phototheque.');
     });
   }
@@ -589,7 +595,11 @@
     const caption = names
       ? `Un souvenir avec ${names}, capture avec simul`
       : 'Un souvenir capture avec simul';
-    await ShareModule.share(item.mediaBlob, `simul-souvenir.${ext}`, caption);
+    const shareItems = [{ blob: item.mediaBlob, name: `simul-souvenir.${ext}` }];
+    if (item.mapImageBlob){
+      shareItems.push({ blob: item.mapImageBlob, name: 'simul-lieu.webp' });
+    }
+    await ShareModule.share(shareItems, caption);
   });
 
   /* ---------------- PWA ---------------- */

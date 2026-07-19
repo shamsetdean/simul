@@ -253,13 +253,21 @@ const Capture = {
 
   /* ---------------- video ---------------- */
 
-  startVideoRecording(){
+  async startVideoRecording(){
     this.recordedChunks = [];
     let streamToRecord;
 
     if (this.mode === 'simultane'){
       streamToRecord = this._composedLiveStream();
     } else {
+      // garantit qu'il y a bien quelque chose a incruster : si le premier
+      // remplissage automatique n'a pas encore eu le temps de se terminer
+      // (enregistrement lance tres vite apres l'ouverture de l'app), on
+      // force une capture avant de commencer, sinon la video n'aurait
+      // que l'arriere, sans aucune trace de l'avant.
+      if (!this.pipFrame){
+        try{ await this._refreshPipOnce(); }catch(err){ /* on tente quand meme */ }
+      }
       this._recording = true;
       streamToRecord = this._composedAlterneLiveStream();
     }

@@ -2,10 +2,16 @@
    simul — share.js
    Partage local uniquement : Web Share API (propose SMS parmi les options
    natives), avec repli sur un lien sms: si l'API est absente.
-   Aucun serveur intermediaire.
+   Aucun serveur intermediaire. Supporte plusieurs fichiers a la fois
+   (media + image de carte du lieu) pour que le contexte du souvenir
+   voyage avec lui quand on le partage.
    ========================================================================== */
 
 const ShareModule = {
+
+  _toFiles(items){
+    return items.map(({ blob, name }) => new File([blob], name, { type: blob.type }));
+  },
 
   /**
    * Ouvre la feuille de partage native juste apres capture, ou
@@ -13,29 +19,30 @@ const ShareModule = {
    * le plus proche possible d'un enregistrement automatique dans la
    * phototheque, sans jamais l'ecrire silencieusement (aucun navigateur
    * ne l'autorise, question de confidentialite).
+   * items : [{ blob, name }, ...] — media principal + carte du lieu si dispo.
    */
-  async saveToLibrary(blob, filename){
-    if (navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: blob.type })] })){
+  async saveToLibrary(items){
+    const files = this._toFiles(items);
+    if (navigator.canShare && navigator.canShare({ files })){
       try{
-        await navigator.share({ files: [new File([blob], filename, { type: blob.type })] });
+        await navigator.share({ files });
         return true;
       }catch(err){
-        return false; // annule ou indisponible : le bouton manuel du detail reste disponible
+        return false;
       }
     }
     return false;
   },
 
-  async share(blob, filename, caption){
-    if (navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: blob.type })] })){
+  /** Partage via SMS (ou toute appli du systeme). items : [{blob,name}]. */
+  async share(items, caption){
+    const files = this._toFiles(items);
+    if (navigator.canShare && navigator.canShare({ files })){
       try{
-        await navigator.share({
-          files: [new File([blob], filename, { type: blob.type })],
-          text: caption || 'Un souvenir capture avec simul'
-        });
+        await navigator.share({ files, text: caption || 'Un souvenir capture avec simul' });
         return true;
       }catch(err){
-        if (err.name === 'AbortError') return false; // annule par l'utilisateur
+        if (err.name === 'AbortError') return false;
         return this._fallback(caption);
       }
     }
