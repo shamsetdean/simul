@@ -1,0 +1,16 @@
+{
+  "name": "simul — souvenirs immersifs",
+  "short_name": "simul",
+  "description": "Capture un souvenir avec les deux cameras a la fois, ancre sur une carte, avec les personnes presentes.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e0f1a",
+  "theme_color": "#0e0f1a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
