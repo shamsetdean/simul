@@ -7,6 +7,25 @@
 
 const ShareModule = {
 
+  /**
+   * Ouvre la feuille de partage native juste apres capture, ou
+   * "Enregistrer l'image/la video" apparait comme option native —
+   * le plus proche possible d'un enregistrement automatique dans la
+   * phototheque, sans jamais l'ecrire silencieusement (aucun navigateur
+   * ne l'autorise, question de confidentialite).
+   */
+  async saveToLibrary(blob, filename){
+    if (navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: blob.type })] })){
+      try{
+        await navigator.share({ files: [new File([blob], filename, { type: blob.type })] });
+        return true;
+      }catch(err){
+        return false; // annule ou indisponible : le bouton manuel du detail reste disponible
+      }
+    }
+    return false;
+  },
+
   async share(blob, filename, caption){
     if (navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: blob.type })] })){
       try{

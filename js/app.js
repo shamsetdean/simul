@@ -1,6 +1,7 @@
 /* ==========================================================================
    simul — app.js
-   Orchestrateur : navigation entre vues, capture, sauvegarde, galerie.
+   Orchestrateur : navigation entre vues, capture, sauvegarde, galerie,
+   carte des lieux, contacts, enregistrement dans la phototheque.
    ========================================================================== */
 
 (() => {
@@ -13,10 +14,11 @@
     detail:  $('#view-detail'),
   };
 
-  let pendingSouvenir = null; // en cours de revue, pas encore sauvegarde
+  let pendingSouvenir = null;
   let currentTags = [];
   let recordingVideo = false;
-  let captureFormat = 'photo'; // 'photo' | 'video'
+  let captureFormat = 'photo';
+  let galleryMapMode = false;
 
   function showView(name){
     Object.values(views).forEach(v => v.classList.remove('active'));
@@ -132,7 +134,7 @@
 
   /* ---------------- revue avant sauvegarde ---------------- */
 
-  async function openReview({ kind, mediaBlob, mediaCanvas }){
+  async function openReview({ kind, mediaBlob }){
     pendingSouvenir = {
       id: `sv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       createdAt: Date.now(),
@@ -163,6 +165,16 @@
     showView('review');
     resolveLocation();
     await refreshTagSuggestions();
+
+    // Enregistrement dans la phototheque : ouvre la feuille de partage
+    // native au plus tot (l'API exige un geste utilisateur recent — le
+    // shutter tap qui a lance toute cette sequence). Aucun navigateur ne
+    // permet d'ecrire silencieusement dans la pellicule ; ceci est le plus
+    // proche possible, un seul tap pour confirmer "Enregistrer".
+    const ext = kind === 'photo' ? 'webp' : 'webm';
+    ShareModule.saveToLibrary(mediaBlob, `simul-souvenir.${ext}`).then(ok => {
+      if (ok) toast('Enregistre dans ta phototheque.');
+    });
   }
 
   async function resolveLocation(){
@@ -190,7 +202,7 @@
     }
   }
 
-  /* ---------------- tags ---------------- */
+  /* ---------------- tags + contacts ---------------- */
 
   function renderTagChips(){
     const box = $('#tag-input-box');
@@ -203,7 +215,7 @@
       const rm = document.createElement('button');
       rm.type = 'button';
       rm.setAttribute('aria-label', `Retirer ${tag}`);
-      rm.innerHTML = '<svg class="icon" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+      rm.innerHTML = '<svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
       rm.addEventListener('click', () => {
         currentTags = currentTags.filter(t => t !== tag);
         renderTagChips();
@@ -248,6 +260,29 @@
     return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   }
 
+  // Contact Picker API : disponible uniquement sur Chrome Android a ce
+  // jour, jamais sur Safari iOS. On l'affiche seulement si le navigateur
+  // la supporte reellement, plutot que de promettre une fonction qui ne
+  // marcherait pas sur iPhone.
+  const contactsBtn = $('#btn-pick-contacts');
+  if ('contacts' in navigator && 'ContactsManager' in window){
+    contactsBtn.style.display = 'flex';
+    contactsBtn.addEventListener('click', async () => {
+      try{
+        const props = ['name'];
+        const opts = { multiple: true };
+        const contacts = await navigator.contacts.select(props, opts);
+        contacts.forEach(c => {
+          const name = (c.name && c.name[0]) || null;
+          if (name) addTag(name);
+        });
+        refreshTagSuggestions();
+      }catch(err){
+        toast("Selection des contacts annulee ou indisponible.");
+      }
+    });
+  }
+
   /* ---------------- sauvegarde / suppression ---------------- */
 
   $('#btn-save').addEventListener('click', async () => {
@@ -273,9 +308,19 @@
 
   $('#btn-open-gallery').addEventListener('click', async () => {
     showView('gallery');
+    galleryMapMode = false;
+    $('#gallery-grid').style.display = 'grid';
+    $('#gallery-map').classList.remove('active');
     await renderGallery();
   });
   $('#btn-gallery-back').addEventListener('click', () => showView('capture'));
+
+  $('#btn-toggle-map').addEventListener('click', async () => {
+    galleryMapMode = !galleryMapMode;
+    $('#gallery-grid').style.display = galleryMapMode ? 'none' : 'grid';
+    $('#gallery-map').classList.toggle('active', galleryMapMode);
+    if (galleryMapMode) await renderGalleryMap();
+  });
 
   async function renderGallery(){
     const grid = $('#gallery-grid');
@@ -303,8 +348,8 @@
       const badge = document.createElement('span');
       badge.className = 'kind-badge';
       badge.innerHTML = item.kind === 'video'
-        ? '<svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>'
-        : '<svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>';
+        ? '<svg class="icon" viewBox="0 0 24 24"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>'
+        : '<svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>';
       card.appendChild(badge);
 
       const meta = document.createElement('span');
@@ -317,6 +362,150 @@
       grid.appendChild(card);
     });
   }
+
+  /* ---------------- carte des lieux ---------------- */
+
+  function clusterByLocation(items){
+    const clusters = [];
+    items.filter(s => s.lat != null && s.lng != null).forEach(s => {
+      let cluster = clusters.find(c => Math.abs(c.lat - s.lat) < 0.0015 && Math.abs(c.lng - s.lng) < 0.0015);
+      if (!cluster){
+        cluster = { lat: s.lat, lng: s.lng, items: [] };
+        clusters.push(cluster);
+      }
+      cluster.items.push(s);
+    });
+    return clusters;
+  }
+
+  async function renderGalleryMap(){
+    const mapEl = $('#gallery-map');
+    const items = await Storage.getAll();
+    const clusters = clusterByLocation(items);
+
+    mapEl.innerHTML = '';
+    if (!clusters.length){
+      mapEl.innerHTML = '<div class="empty-state"><p>Aucun souvenir localise pour l\'instant.</p></div>';
+      return;
+    }
+
+    const w = mapEl.clientWidth || 320;
+    const h = mapEl.clientHeight || 400;
+    const result = await MapModule.fetchBoundsImage(clusters, w, h);
+    if (!result){
+      mapEl.innerHTML = '<div class="empty-state"><p>Carte indisponible hors-ligne.</p></div>';
+      return;
+    }
+
+    const img = document.createElement('img');
+    img.src = result.canvas.toDataURL('image/webp', 0.85);
+    mapEl.appendChild(img);
+
+    clusters.forEach(cluster => {
+      const pos = result.project(cluster.lat, cluster.lng);
+      const pinBtn = document.createElement('button');
+      pinBtn.type = 'button';
+      pinBtn.className = 'map-pin-btn';
+      pinBtn.style.left = `${pos.x}px`;
+      pinBtn.style.top = `${pos.y}px`;
+      pinBtn.setAttribute('aria-label', `${cluster.items.length} souvenir(s) a ce lieu`);
+
+      const representative = cluster.items[0];
+      const thumbWrap = document.createElement('span');
+      thumbWrap.className = 'pin-thumb';
+      if (representative.kind === 'photo'){
+        const im = document.createElement('img');
+        im.src = URL.createObjectURL(representative.mediaBlob);
+        thumbWrap.appendChild(im);
+      } else {
+        const vid = document.createElement('video');
+        vid.src = URL.createObjectURL(representative.mediaBlob);
+        vid.muted = true;
+        thumbWrap.appendChild(vid);
+      }
+      pinBtn.appendChild(thumbWrap);
+
+      if (cluster.items.length > 1){
+        const count = document.createElement('span');
+        count.className = 'pin-count';
+        count.textContent = cluster.items.length;
+        pinBtn.appendChild(count);
+      }
+
+      const tail = document.createElement('span');
+      tail.className = 'pin-tail';
+      pinBtn.appendChild(tail);
+
+      pinBtn.addEventListener('click', () => openLocationSheet(cluster));
+      mapEl.appendChild(pinBtn);
+    });
+  }
+
+  /* ---------------- location sheet ---------------- */
+
+  function openLocationSheet(cluster){
+    const backdrop = $('#location-sheet-backdrop');
+    const items = cluster.items.slice().sort((a, b) => b.createdAt - a.createdAt);
+    const representative = items[0];
+
+    const heroImg = $('#location-sheet-img');
+    if (representative.kind === 'photo'){
+      heroImg.src = URL.createObjectURL(representative.mediaBlob);
+    } else {
+      // pour une video, on affiche une image de la premiere frame via un
+      // element video temporaire n'est pas trivial en agrandi ; on montre
+      // la video elle-meme a la place de l'image.
+      heroImg.style.display = 'none';
+      const existingVid = $('#location-sheet-hero video');
+      if (existingVid) existingVid.remove();
+      const vid = document.createElement('video');
+      vid.src = URL.createObjectURL(representative.mediaBlob);
+      vid.controls = true;
+      vid.playsInline = true;
+      vid.style.width = '100%';
+      vid.style.maxHeight = '200px';
+      $('#location-sheet-hero').appendChild(vid);
+    }
+    if (representative.kind === 'photo') heroImg.style.display = 'block';
+
+    const photoCount = items.filter(i => i.kind === 'photo').length;
+    const videoCount = items.filter(i => i.kind === 'video').length;
+    $('#location-sheet-coords').textContent = `${cluster.lat.toFixed(4)}, ${cluster.lng.toFixed(4)}`;
+    const parts = [];
+    if (photoCount) parts.push(`${photoCount} photo${photoCount > 1 ? 's' : ''}`);
+    if (videoCount) parts.push(`${videoCount} video${videoCount > 1 ? 's' : ''}`);
+    $('#location-sheet-count').textContent = parts.join(' · ');
+
+    const grid = $('#location-mini-grid');
+    grid.innerHTML = '';
+    items.forEach(item => {
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'mini-item';
+      const media = item.kind === 'photo'
+        ? Object.assign(document.createElement('img'), { src: URL.createObjectURL(item.mediaBlob) })
+        : Object.assign(document.createElement('video'), { src: URL.createObjectURL(item.mediaBlob), muted: true });
+      cell.appendChild(media);
+      cell.addEventListener('click', () => {
+        closeLocationSheet();
+        openDetail(item.id);
+      });
+      grid.appendChild(cell);
+    });
+
+    backdrop.classList.add('show');
+  }
+
+  function closeLocationSheet(){
+    $('#location-sheet-backdrop').classList.remove('show');
+    const existingVid = document.querySelector('#location-sheet-hero video');
+    if (existingVid) existingVid.remove();
+    $('#location-sheet-img').style.display = 'block';
+  }
+
+  $('#location-sheet-backdrop').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeLocationSheet();
+  });
 
   /* ---------------- detail ---------------- */
 
@@ -357,6 +546,14 @@
     }
     mapMeta.textContent = item.lat ? `${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}` : 'Lieu non disponible';
 
+    mapStrip.onclick = async () => {
+      if (item.lat == null) return;
+      const all = await Storage.getAll();
+      const clusters = clusterByLocation(all);
+      const cluster = clusters.find(c => Math.abs(c.lat - item.lat) < 0.0015 && Math.abs(c.lng - item.lng) < 0.0015);
+      if (cluster) openLocationSheet(cluster);
+    };
+
     const tagsBox = $('#detail-tags');
     tagsBox.innerHTML = '';
     (item.tags || []).forEach(tag => {
@@ -372,7 +569,8 @@
 
   $('#btn-detail-back').addEventListener('click', async () => {
     showView('gallery');
-    await renderGallery();
+    if (!galleryMapMode) await renderGallery();
+    else await renderGalleryMap();
   });
 
   $('#btn-detail-delete').addEventListener('click', async () => {
