@@ -132,10 +132,20 @@ const Capture = {
     await this.videoMain.play();
   },
 
+  /** Bascule manuelle appelee depuis le bouton "voir l'autre camera",
+   *  pour cadrer avant de declencher. Retourne la facing active apres bascule. */
+  async previewSwitch(){
+    await this._switchFacing();
+    return this.currentFacing;
+  },
+
   /**
    * Capture une photo composite (PiP) a partir de l'etat courant.
-   * En mode alterne : prend l'arriere, bascule vers l'avant, reprend,
-   * puis compose les deux images.
+   * En mode alterne : capture la camera actuellement previsualisee (qui
+   * peut etre l'avant si l'utilisateur a bascule manuellement avant de
+   * declencher), bascule vers l'autre, reprend, recompose toujours avec
+   * l'arriere en fond et l'avant en PiP, puis revient a l'arriere pour
+   * l'ecran.
    */
   async capturePhoto(){
     if (this.mode === 'simultane'){
@@ -144,11 +154,18 @@ const Capture = {
       return this._composePiP(back, front);
     }
     // mode alterne : deux instantanes rapides sur le meme flux
-    const back = this._grabFrame(this.videoMain);
+    const startedOnBack = this.currentFacing === 'environment';
+    const firstFrame = this._grabFrame(this.videoMain);
     await this._switchFacing();
     await new Promise(r => setTimeout(r, 180)); // laisser le capteur se stabiliser
-    const front = this._grabFrame(this.videoMain);
-    await this._switchFacing(); // revient a l'arriere pour l'ecran
+    const secondFrame = this._grabFrame(this.videoMain);
+
+    const back = startedOnBack ? firstFrame : secondFrame;
+    const front = startedOnBack ? secondFrame : firstFrame;
+
+    if (this.currentFacing !== 'environment'){
+      await this._switchFacing(); // revient toujours a l'arriere pour l'ecran
+    }
     return this._composePiP(back, front);
   },
 

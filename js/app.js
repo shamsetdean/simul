@@ -36,20 +36,42 @@
   async function initCapture(){
     const badge = $('#capture-mode-label');
     const badgeWrap = $('#capture-mode-badge');
+    const swapBtn = $('#btn-preview-swap');
     try{
       const mode = await Capture.init($('#video-main'), $('#video-pip'));
       if (mode === 'simultane'){
         badge.textContent = 'Capture simultanee';
         badgeWrap.classList.remove('alt');
+        swapBtn.style.display = 'none';
       } else {
-        badge.textContent = 'Capture rapide (alternee)';
         badgeWrap.classList.add('alt');
+        updateAlterneBadge();
+        swapBtn.style.display = 'flex';
       }
     }catch(err){
       badge.textContent = 'Camera indisponible';
       toast("Impossible d'acceder aux cameras. Verifie les autorisations.");
     }
   }
+
+  function updateAlterneBadge(){
+    const badge = $('#capture-mode-label');
+    const isBack = Capture.currentFacing === 'environment';
+    badge.textContent = isBack ? 'Aperçu : arriere' : 'Aperçu : avant';
+  }
+
+  $('#btn-preview-swap').addEventListener('click', async () => {
+    const btn = $('#btn-preview-swap');
+    btn.disabled = true;
+    try{
+      await Capture.previewSwitch();
+      updateAlterneBadge();
+    }catch(err){
+      toast("Impossible de basculer de camera.");
+    }finally{
+      btn.disabled = false;
+    }
+  });
 
   $('#btn-mode-photo').addEventListener('click', () => {
     captureFormat = 'photo';
@@ -76,6 +98,7 @@
     try{
       const canvas = await Capture.capturePhoto();
       const blob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.92));
+      if (Capture.mode === 'alterne') updateAlterneBadge();
       await openReview({ kind: 'photo', mediaBlob: blob, mediaCanvas: canvas });
     }catch(err){
       toast('La capture a echoue, reessaie.');
