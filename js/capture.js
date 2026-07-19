@@ -1,8 +1,9 @@
 /* ==========================================================================
    simul — capture.js
-   Tente une double capture simultanee (front + back). Si le navigateur/
-   appareil ne le permet pas, bascule sur une capture rapide alternee
-   (arriere puis avant, switch facingMode sur le meme flux).
+   Tente une double capture simultanee (front + back) sur les appareils qui
+   le supportent. Sur iOS (jamais compatible avec deux flux camera actifs),
+   on saute directement l'essai et on bascule sur une capture rapide
+   alternee (arriere puis avant, switch facingMode sur le meme flux).
    On ne pretend jamais un mode qui n'est pas reellement actif.
    ========================================================================== */
 
@@ -14,13 +15,25 @@ const Capture = {
   recorder: null,
   recordedChunks: [],
 
+  isIOS(){
+    return /iPad|iPhone|iPod/.test(navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  },
+
   /**
    * Essaie d'ouvrir les deux cameras en parallele.
-   * Retourne le mode reellement disponible.
+   * iOS Safari ne permet jamais deux flux camera actifs a la fois : on saute
+   * directement l'essai simultane pour eviter de laisser la camera arriere
+   * dans un etat bloque le temps qu'iOS la libere (source du bug ou la
+   * camera arriere restait indisponible juste apres l'echec du simultane).
    */
   async init(videoMainEl, videoPipEl){
     this.videoMain = videoMainEl;
     this.videoPip = videoPipEl;
+
+    if (this.isIOS()){
+      return this._initAlterne();
+    }
 
     try{
       const [back, front] = await Promise.all([
@@ -40,18 +53,58 @@ const Capture = {
       this.mode = 'simultane';
       return this.mode;
     }catch(err){
-      // Simultane indisponible (iOS Safari, ou un seul capteur exploitable)
+      // Simultane indisponible (deux flux refuses, ou un seul capteur exploitable)
       this._cleanupSimultane();
+      await this._releaseDelay();
       return this._initAlterne();
+    }
+  },
+
+  /** Petite pause pour laisser le temps au systeme (surtout iOS) de
+   *  liberer completement une camera avant d'en rouvrir une autre. */
+  _releaseDelay(ms = 350){
+    return new Promise(r => setTimeout(r, ms));
+  },
+
+  /**
+   * Ouvre un flux camera unique, avec repli automatique si la combinaison
+   * camera+micro echoue (certains appareils/permissions bloquent le tout
+   * si le micro pose probleme, alors que la camera seule fonctionnerait).
+   * Reessaie une fois apres un court delai en cas d'echec transitoire
+   * (typique d'iOS qui met du temps a liberer une camera precedente).
+   */
+  async _openStream(facing, wantAudio = true, attempt = 1){
+    try{
+      return await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing }, audio: wantAudio
+      });
+    }catch(err){
+      if (wantAudio && (err.name === 'NotReadableError' || err.name === 'OverconstrainedError')){
+        try{
+          // repli sans micro : isole si le probleme vient de l'audio
+          return await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: facing }, audio: false
+          });
+        }catch(err2){
+          if (attempt < 2){
+            await this._releaseDelay(500);
+            return this._openStream(facing, wantAudio, attempt + 1);
+          }
+          throw err2;
+        }
+      }
+      if (attempt < 2){
+        await this._releaseDelay(500);
+        return this._openStream(facing, wantAudio, attempt + 1);
+      }
+      throw err;
     }
   },
 
   async _initAlterne(){
     this.videoPip.style.display = 'none';
     this.currentFacing = 'environment';
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: this.currentFacing }, audio: true
-    });
+    const stream = await this._openStream(this.currentFacing, true);
     this.singleStream = stream;
     this.videoMain.srcObject = stream;
     await this.videoMain.play();
@@ -72,9 +125,8 @@ const Capture = {
     if (!this.singleStream) return;
     this.singleStream.getTracks().forEach(t => t.stop());
     this.currentFacing = this.currentFacing === 'environment' ? 'user' : 'environment';
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: this.currentFacing }, audio: false
-    });
+    await this._releaseDelay(120); // laisse iOS liberer la camera precedente
+    const stream = await this._openStream(this.currentFacing, false);
     this.singleStream = stream;
     this.videoMain.srcObject = stream;
     await this.videoMain.play();
