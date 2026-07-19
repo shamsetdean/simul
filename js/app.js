@@ -136,7 +136,7 @@
 
   /* ---------------- revue avant sauvegarde ---------------- */
 
-  async function openReview({ kind, mediaBlob }){
+  async function openReview({ kind, mediaBlob, mediaCanvas }){
     pendingSouvenir = {
       id: `sv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       createdAt: Date.now(),
@@ -144,9 +144,12 @@
       mediaBlob,
       captureMode: Capture.mode,
       lat: null, lng: null,
-      mapImageBlob: null,
       tags: []
     };
+    // canvas brut garde en memoire (pas persiste) pour y fusionner la
+    // carte une fois le lieu resolu — image finale unique, pas de fichier
+    // intermediaire
+    pendingSouvenir._composeCanvas = (kind === 'photo') ? mediaCanvas : null;
     currentTags = [];
     renderTagChips();
 
@@ -172,17 +175,14 @@
     await resolveLocation();
     await refreshTagSuggestions();
 
-    // Enregistrement dans la phototheque : ouvre la feuille de partage
-    // native une fois le lieu resolu, pour que la carte parte avec la
-    // photo/video. Aucun navigateur ne permet d'ecrire silencieusement
+    // Enregistrement dans la phototheque : une seule image/video finale,
+    // aucun fichier separe. Ouvre la feuille de partage native une fois
+    // la carte fusionnee dans la photo (ou la localisation resolue pour
+    // une video). Aucun navigateur ne permet d'ecrire silencieusement
     // dans la pellicule ; ceci est le plus proche possible, un seul tap
     // pour confirmer "Enregistrer".
-    const ext = kind === 'photo' ? 'webp' : 'webm';
-    const shareItems = [{ blob: mediaBlob, name: `simul-souvenir.${ext}` }];
-    if (pendingSouvenir.mapImageBlob){
-      shareItems.push({ blob: pendingSouvenir.mapImageBlob, name: 'simul-lieu.webp' });
-    }
-    ShareModule.saveToLibrary(shareItems).then(ok => {
+    const ext = pendingSouvenir.kind === 'photo' ? 'webp' : 'webm';
+    ShareModule.saveToLibrary([{ blob: pendingSouvenir.mediaBlob, name: `simul-souvenir.${ext}` }]).then(ok => {
       if (ok) toast('Enregistre dans ta phototheque.');
     });
   }
@@ -190,6 +190,7 @@
   async function resolveLocation(){
     const metaEl = $('#review-map-meta');
     const imgEl = $('#review-map-img');
+    $('#review-map-strip').classList.remove('status-only');
     metaEl.textContent = 'Localisation…';
     imgEl.style.display = 'none';
 
@@ -200,15 +201,41 @@
     }
     pendingSouvenir.lat = pos.lat;
     pendingSouvenir.lng = pos.lng;
-    metaEl.textContent = `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}`;
 
     const mosaic = await MapModule.fetchMapImage(pos.lat, pos.lng);
-    const strip = MapModule.cropToStrip(mosaic);
-    if (strip){
-      const blob = await MapModule.canvasToBlob(strip);
-      pendingSouvenir.mapImageBlob = blob;
-      imgEl.src = URL.createObjectURL(blob);
-      imgEl.style.display = 'block';
+    if (!mosaic){
+      metaEl.textContent = `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}`;
+      return;
+    }
+
+    if (pendingSouvenir.kind === 'photo' && pendingSouvenir._composeCanvas){
+      // fusion directe dans la photo : image unique, carte + point GPS
+      // integres, aucun fichier separe
+      const inset = MapModule.cropToInset(mosaic);
+      const finalCanvas = Capture.composeWithMap(pendingSouvenir._composeCanvas, inset);
+      const finalBlob = await new Promise(r => finalCanvas.toBlob(r, 'image/webp', 0.92));
+      pendingSouvenir.mediaBlob = finalBlob;
+      pendingSouvenir._composeCanvas = finalCanvas;
+
+      const wrap = $('#review-media-wrap');
+      wrap.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(finalBlob);
+      wrap.appendChild(img);
+
+      $('#review-map-strip').classList.add('status-only');
+      metaEl.textContent = 'Lieu ajoute a la photo';
+      imgEl.style.display = 'none';
+    } else {
+      // video : la carte n'est pas fusionnee dans le flux video (hors de
+      // portee actuellement) — on affiche un simple aperçu de lieu
+      const strip = MapModule.cropToStrip(mosaic);
+      if (strip){
+        const blob = await MapModule.canvasToBlob(strip);
+        imgEl.src = URL.createObjectURL(blob);
+        imgEl.style.display = 'block';
+      }
+      metaEl.textContent = `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}`;
     }
   }
 
@@ -298,6 +325,7 @@
   $('#btn-save').addEventListener('click', async () => {
     if (!pendingSouvenir) return;
     pendingSouvenir.tags = [...currentTags];
+    delete pendingSouvenir._composeCanvas;
     await Storage.save(pendingSouvenir);
     toast('Souvenir garde.');
     pendingSouvenir = null;
@@ -547,14 +575,22 @@
     const mapStrip = $('#detail-map-strip');
     const mapImg = $('#detail-map-img');
     const mapMeta = $('#detail-map-meta');
-    if (item.mapImageBlob){
-      mapImg.src = URL.createObjectURL(item.mapImageBlob);
-      mapStrip.style.display = 'block';
-    } else {
-      mapStrip.style.display = item.lat ? 'block' : 'none';
+    if (item.kind === 'photo'){
+      // la carte est deja fusionnee dans la photo elle-meme : le bandeau
+      // separe ne sert plus qu'a acceder a la fiche du lieu
+      mapStrip.style.display = item.lat != null ? 'block' : 'none';
       mapImg.removeAttribute('src');
+      mapMeta.textContent = item.lat != null ? 'Carte integree · voir les autres souvenirs ici' : '';
+    } else if (item.lat != null){
+      mapStrip.style.display = 'block';
+      mapMeta.textContent = `${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}`;
+      MapModule.fetchMapImage(item.lat, item.lng).then(mosaic => {
+        const strip = MapModule.cropToStrip(mosaic);
+        if (strip) mapImg.src = strip.toDataURL('image/webp', 0.85);
+      });
+    } else {
+      mapStrip.style.display = 'none';
     }
-    mapMeta.textContent = item.lat ? `${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}` : 'Lieu non disponible';
 
     mapStrip.onclick = async () => {
       if (item.lat == null) return;
@@ -599,11 +635,7 @@
     const caption = names
       ? `Un souvenir avec ${names}, capture avec simul`
       : 'Un souvenir capture avec simul';
-    const shareItems = [{ blob: item.mediaBlob, name: `simul-souvenir.${ext}` }];
-    if (item.mapImageBlob){
-      shareItems.push({ blob: item.mapImageBlob, name: 'simul-lieu.webp' });
-    }
-    await ShareModule.share(shareItems, caption);
+    await ShareModule.share([{ blob: item.mediaBlob, name: `simul-souvenir.${ext}` }], caption);
   });
 
   /* ---------------- PWA ---------------- */

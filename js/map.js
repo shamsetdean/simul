@@ -147,6 +147,20 @@ const MapModule = {
 
   /** Recadre la mosaique en bande large + assombrie/floutee pour servir
    *  de fond discret derriere le composite photo/video. */
+  /** Recadrage carre centre sur les coordonnees GPS exactes, pour
+   *  l'incrustation directe dans la photo finale (pas de teinte assombrie,
+   *  la lisibilite du point GPS prime). */
+  cropToInset(mosaicCanvas, size = 260){
+    if (!mosaicCanvas) return null;
+    const out = document.createElement('canvas');
+    out.width = size; out.height = size;
+    const ctx = out.getContext('2d');
+    const sx = (mosaicCanvas.width - size) / 2;
+    const sy = (mosaicCanvas.height - size) / 2;
+    ctx.drawImage(mosaicCanvas, sx, sy, size, size, 0, 0, size, size);
+    return out;
+  },
+
   cropToStrip(mosaicCanvas, outW = 600, outH = 200){
     if (!mosaicCanvas) return null;
     const out = document.createElement('canvas');

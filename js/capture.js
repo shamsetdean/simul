@@ -216,29 +216,74 @@ const Capture = {
     return c;
   },
 
+  _roundedRectPath(ctx, x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  },
+
+  /** Photo avant incrustee, sans aucun contour — integration nette. */
   _drawPipOverlay(ctx, canvas, frontCanvas){
     const pipW = canvas.width * 0.32;
     const pipH = pipW * (frontCanvas.height / frontCanvas.width);
     const pad = canvas.width * 0.03;
     const x = canvas.width - pipW - pad;
     const y = pad;
-    const radius = 18;
 
     ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.arcTo(x + pipW, y, x + pipW, y + pipH, radius);
-    ctx.arcTo(x + pipW, y + pipH, x, y + pipH, radius);
-    ctx.arcTo(x, y + pipH, x, y, radius);
-    ctx.arcTo(x, y, x + pipW, y, radius);
-    ctx.closePath();
+    this._roundedRectPath(ctx, x, y, pipW, pipH, canvas.width * 0.028);
     ctx.clip();
     ctx.drawImage(frontCanvas, x, y, pipW, pipH);
     ctx.restore();
+  },
 
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = 'rgba(238,234,247,.9)';
+  /** Miniature carte + point bleu a l'emplacement GPS exact, sans contour. */
+  _drawMapInset(ctx, canvas, mapCanvas){
+    const size = canvas.width * 0.30;
+    const pad = canvas.width * 0.03;
+    const x = pad;
+    const y = canvas.height - size - pad;
+
+    ctx.save();
+    this._roundedRectPath(ctx, x, y, size, size, canvas.width * 0.028);
+    ctx.clip();
+    ctx.drawImage(mapCanvas, x, y, size, size);
+    ctx.restore();
+
+    // le crop de la carte est toujours centre sur les coordonnees GPS
+    // exactes, donc le point se place au centre de la miniature
+    const cx = x + size / 2;
+    const cy = y + size / 2;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, size * 0.10, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(47,111,237,.22)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, size * 0.045, 0, Math.PI * 2);
+    ctx.fillStyle = '#2f6fed';
+    ctx.fill();
+    ctx.lineWidth = size * 0.018;
+    ctx.strokeStyle = 'rgba(255,255,255,.95)';
     ctx.stroke();
+  },
+
+  /** Fusionne la miniature carte + point GPS dans une photo deja composee
+   *  (arriere + avant). Retourne un nouveau canvas — image finale unique,
+   *  aucun fichier separe. */
+  composeWithMap(baseCanvas, mapCanvas){
+    const out = document.createElement('canvas');
+    out.width = baseCanvas.width;
+    out.height = baseCanvas.height;
+    const ctx = out.getContext('2d');
+    ctx.drawImage(baseCanvas, 0, 0);
+    this._drawMapInset(ctx, out, mapCanvas);
+    return out;
   },
 
   _composePiP(backCanvas, frontCanvas){
