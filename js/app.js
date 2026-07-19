@@ -37,16 +37,30 @@
     const badge = $('#capture-mode-label');
     const badgeWrap = $('#capture-mode-badge');
     const swapBtn = $('#btn-preview-swap');
+    const pipCanvas = $('#pip-canvas');
+    const videoMain = $('#video-main');
+
+    Capture.onPipUpdate = (frameCanvas) => {
+      pipCanvas.width = frameCanvas.width;
+      pipCanvas.height = frameCanvas.height;
+      pipCanvas.getContext('2d').drawImage(frameCanvas, 0, 0);
+    };
+    Capture.onPreviewFlicker = (isFlickering) => {
+      videoMain.classList.toggle('updating', isFlickering);
+    };
+
     try{
-      const mode = await Capture.init($('#video-main'), $('#video-pip'));
+      const mode = await Capture.init(videoMain, $('#video-pip'));
       if (mode === 'simultane'){
         badge.textContent = 'Capture simultanee';
         badgeWrap.classList.remove('alt');
         swapBtn.style.display = 'none';
+        pipCanvas.style.display = 'none';
       } else {
+        badge.textContent = 'Arriere en direct · avant en PiP';
         badgeWrap.classList.add('alt');
-        updateAlterneBadge();
         swapBtn.style.display = 'flex';
+        pipCanvas.style.display = 'block';
       }
     }catch(err){
       badge.textContent = 'Camera indisponible';
@@ -54,20 +68,13 @@
     }
   }
 
-  function updateAlterneBadge(){
-    const badge = $('#capture-mode-label');
-    const isBack = Capture.currentFacing === 'environment';
-    badge.textContent = isBack ? 'Aperçu : arriere' : 'Aperçu : avant';
-  }
-
   $('#btn-preview-swap').addEventListener('click', async () => {
     const btn = $('#btn-preview-swap');
     btn.disabled = true;
     try{
-      await Capture.previewSwitch();
-      updateAlterneBadge();
+      await Capture.refreshPipNow();
     }catch(err){
-      toast("Impossible de basculer de camera.");
+      toast("Impossible d'actualiser l'apercu.");
     }finally{
       btn.disabled = false;
     }
@@ -98,7 +105,6 @@
     try{
       const canvas = await Capture.capturePhoto();
       const blob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.92));
-      if (Capture.mode === 'alterne') updateAlterneBadge();
       await openReview({ kind: 'photo', mediaBlob: blob, mediaCanvas: canvas });
     }catch(err){
       toast('La capture a echoue, reessaie.');
@@ -110,10 +116,12 @@
   async function handleVideoToggle(){
     const shutter = $('#btn-shutter');
     if (!recordingVideo){
+      if (Capture.mode === 'alterne'){
+        toast('Avant figee sur le dernier apercu pendant le clip', 2600);
+      }
       Capture.startVideoRecording();
       recordingVideo = true;
       shutter.classList.add('recording');
-      toast('Enregistrement…', 1400);
     } else {
       shutter.classList.remove('recording');
       const blob = await Capture.stopVideoRecording();
