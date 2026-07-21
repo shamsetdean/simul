@@ -105,9 +105,9 @@
     const shutter = $('#btn-shutter');
     shutter.disabled = true;
     try{
-      const canvas = await Capture.capturePhoto();
-      const blob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.92));
-      await openReview({ kind: 'photo', mediaBlob: blob, mediaCanvas: canvas });
+      const { back, front, composed } = await Capture.capturePhoto();
+      const blob = await new Promise(r => composed.toBlob(r, 'image/webp', 0.92));
+      await openReview({ kind: 'photo', mediaBlob: blob, backCanvas: back, frontCanvas: front });
     }catch(err){
       toast('La capture a echoue, reessaie.');
     }finally{
@@ -136,7 +136,7 @@
 
   /* ---------------- revue avant sauvegarde ---------------- */
 
-  async function openReview({ kind, mediaBlob, mediaCanvas }){
+  async function openReview({ kind, mediaBlob, backCanvas, frontCanvas }){
     pendingSouvenir = {
       id: `sv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       createdAt: Date.now(),
@@ -146,10 +146,11 @@
       lat: null, lng: null,
       tags: []
     };
-    // canvas brut garde en memoire (pas persiste) pour y fusionner la
-    // carte une fois le lieu resolu — image finale unique, pas de fichier
-    // intermediaire
-    pendingSouvenir._composeCanvas = (kind === 'photo') ? mediaCanvas : null;
+    // canvas bruts gardes en memoire (pas persistes) pour la composition
+    // finale complete une fois le lieu resolu — image finale unique, pas
+    // de fichier intermediaire
+    pendingSouvenir._rawBack = (kind === 'photo') ? backCanvas : null;
+    pendingSouvenir._rawFront = (kind === 'photo') ? frontCanvas : null;
     currentTags = [];
     renderTagChips();
 
@@ -202,20 +203,28 @@
     pendingSouvenir.lat = pos.lat;
     pendingSouvenir.lng = pos.lng;
 
-    const mosaic = await MapModule.fetchMapImage(pos.lat, pos.lng, 18);
-    if (!mosaic){
-      metaEl.textContent = `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}`;
-      return;
-    }
+    if (pendingSouvenir.kind === 'photo' && pendingSouvenir._rawBack){
+      // composition finale complete : fond carte floutee, photo arriere
+      // en grande carte inseree, PiP avant, bandeau carte nette + point
+      // GPS — image unique, aucun fichier separe
+      const canvas = pendingSouvenir._rawBack;
+      const margin = canvas.width * 0.045;
+      const mainW = canvas.width - margin * 2;
+      const bandPad = mainW * 0.035;
+      const bandW = mainW - bandPad * 2;
+      const bandH = bandW * 0.42;
 
-    if (pendingSouvenir.kind === 'photo' && pendingSouvenir._composeCanvas){
-      // fusion directe dans la photo : image unique, carte + point GPS
-      // integres, aucun fichier separe
-      const inset = MapModule.cropToInset(mosaic);
-      const finalCanvas = Capture.composeWithMap(pendingSouvenir._composeCanvas, inset);
+      const [bgMap, bandMap] = await Promise.all([
+        MapModule.fetchCenteredImage(pos.lat, pos.lng, canvas.width * 1.15, canvas.height * 1.15, 15),
+        MapModule.fetchCenteredImage(pos.lat, pos.lng, bandW, bandH, 17)
+      ]);
+
+      const finalCanvas = Capture.composeFinalLayout(
+        pendingSouvenir._rawBack, pendingSouvenir._rawFront, bgMap, bandMap
+      );
       const finalBlob = await new Promise(r => finalCanvas.toBlob(r, 'image/webp', 0.92));
       pendingSouvenir.mediaBlob = finalBlob;
-      pendingSouvenir._composeCanvas = finalCanvas;
+      pendingSouvenir._rawBack = finalCanvas; // pour un rendu de secours si reappel
 
       const wrap = $('#review-media-wrap');
       wrap.innerHTML = '';
@@ -224,9 +233,14 @@
       wrap.appendChild(img);
 
       $('#review-map-strip').classList.add('status-only');
-      metaEl.textContent = 'Lieu ajoute a la photo';
+      metaEl.textContent = bandMap ? 'Lieu ajoute a la photo' : `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}`;
       imgEl.style.display = 'none';
     } else {
+      const mosaic = await MapModule.fetchMapImage(pos.lat, pos.lng, 18);
+      if (!mosaic){
+        metaEl.textContent = `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}`;
+        return;
+      }
       // video : la carte n'est pas fusionnee dans le flux video (hors de
       // portee actuellement) — on affiche un simple aperçu de lieu
       const strip = MapModule.cropToStrip(mosaic);
@@ -325,7 +339,8 @@
   $('#btn-save').addEventListener('click', async () => {
     if (!pendingSouvenir) return;
     pendingSouvenir.tags = [...currentTags];
-    delete pendingSouvenir._composeCanvas;
+    delete pendingSouvenir._rawBack;
+    delete pendingSouvenir._rawFront;
     await Storage.save(pendingSouvenir);
     toast('Souvenir garde.');
     pendingSouvenir = null;

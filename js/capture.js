@@ -179,7 +179,10 @@ const Capture = {
   },
 
   /**
-   * Capture une photo composite (PiP) a partir de l'etat courant.
+   * Capture une photo a partir de l'etat courant. Retourne les canvas
+   * bruts (back/front) en plus d'un composite interimaire simple (utilise
+   * pour l'affichage immediat en revue, avant que la carte soit prete —
+   * la composition finale complete se fait ensuite via composeFinalLayout).
    * En mode alterne : capture precisement les deux cameras au moment du
    * declenchement, independamment du PiP affiche a l'ecran.
    */
@@ -187,7 +190,7 @@ const Capture = {
     if (this.mode === 'simultane'){
       const back = this._grabFrame(this.videoMain);
       const front = this._grabFrame(this.videoPip);
-      return this._composePiP(back, front);
+      return { back, front, composed: this._composePiP(back, front) };
     }
 
     const startedOnBack = this.currentFacing === 'environment';
@@ -205,7 +208,122 @@ const Capture = {
     if (this.currentFacing !== 'environment'){
       await this._switchFacing();
     }
-    return this._composePiP(back, front);
+    return { back, front, composed: this._composePiP(back, front) };
+  },
+
+  /** Dessine une image en mode "cover" dans un rectangle donne, recadree
+   *  au centre si les proportions ne correspondent pas exactement. */
+  _drawCover(ctx, img, x, y, w, h){
+    const scale = Math.max(w / img.width, h / img.height);
+    const sw = w / scale;
+    const sh = h / scale;
+    const sx = (img.width - sw) / 2;
+    const sy = (img.height - sh) / 2;
+    ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+  },
+
+  /** Fond plein cadre : carte floutee, legerement assombrie pour que le
+   *  premier plan ressorte. Surdimensionnee pour eviter toute frange
+   *  transparente due au flou sur les bords. */
+  _drawBlurredMapBackground(ctx, canvas, mapCanvas){
+    const overscan = canvas.width * 0.06;
+    ctx.save();
+    ctx.filter = `blur(${Math.round(canvas.width * 0.026)}px)`;
+    this._drawCover(ctx, mapCanvas, -overscan, -overscan, canvas.width + overscan * 2, canvas.height + overscan * 2);
+    ctx.restore();
+    ctx.fillStyle = 'rgba(8,8,12,.22)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  },
+
+  /**
+   * Composition finale complete, hierarchie :
+   *  1. Fond : carte floutee plein cadre
+   *  2. Premier plan : photo arriere, en grande carte arrondie inseree
+   *     (pas plein bord — la carte floutee reste visible en bordure)
+   *  3. Haut-droite : photo avant en incrustation, sans contour
+   *  4. Bas : bandeau carte nette, pleine largeur de la carte principale,
+   *     avec point GPS exact
+   * Retourne un nouveau canvas — image unique, aucun fichier separe.
+   */
+  composeFinalLayout(backCanvas, frontCanvas, bgMapCanvas, bandMapCanvas){
+    const out = document.createElement('canvas');
+    out.width = backCanvas.width;
+    out.height = backCanvas.height;
+    const ctx = out.getContext('2d');
+
+    // 1. fond
+    if (bgMapCanvas){
+      this._drawBlurredMapBackground(ctx, out, bgMapCanvas);
+    } else {
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, out.width, out.height);
+    }
+
+    // 2. carte principale (photo arriere), inseree avec marge
+    const margin = out.width * 0.045;
+    const mainX = margin, mainY = margin;
+    const mainW = out.width - margin * 2;
+    const mainH = out.height - margin * 2;
+    const mainRadius = out.width * 0.06;
+
+    this._drawRoundedShadow(ctx, mainX, mainY, mainW, mainH, mainRadius, out.width * 1.4);
+    ctx.save();
+    this._roundedRectPath(ctx, mainX, mainY, mainW, mainH, mainRadius);
+    ctx.clip();
+    this._drawCover(ctx, backCanvas, mainX, mainY, mainW, mainH);
+    ctx.restore();
+
+    // 3. PiP avant, haut-droite de la carte principale, sans contour
+    if (frontCanvas){
+      const pipW = mainW * 0.32;
+      const pipH = pipW * (frontCanvas.height / frontCanvas.width);
+      const pipPad = mainW * 0.035;
+      const px = mainX + mainW - pipW - pipPad;
+      const py = mainY + pipPad;
+      const pipRadius = out.width * 0.028;
+
+      this._drawRoundedShadow(ctx, px, py, pipW, pipH, pipRadius, out.width);
+      ctx.save();
+      this._roundedRectPath(ctx, px, py, pipW, pipH, pipRadius);
+      ctx.clip();
+      this._drawCover(ctx, frontCanvas, px, py, pipW, pipH);
+      ctx.restore();
+    }
+
+    // 4. bandeau carte nette, bas de la carte principale, pleine largeur
+    if (bandMapCanvas){
+      const bandPad = mainW * 0.035;
+      const bandW = mainW - bandPad * 2;
+      const bandH = bandMapCanvas.height * (bandW / bandMapCanvas.width);
+      const bx = mainX + bandPad;
+      const by = mainY + mainH - bandH - bandPad;
+      const bandRadius = out.width * 0.028;
+
+      this._drawRoundedShadow(ctx, bx, by, bandW, bandH, bandRadius, out.width);
+      ctx.save();
+      this._roundedRectPath(ctx, bx, by, bandW, bandH, bandRadius);
+      ctx.clip();
+      this._drawCover(ctx, bandMapCanvas, bx, by, bandW, bandH);
+      ctx.restore();
+
+      const cx = bx + bandW / 2;
+      const cy = by + bandH / 2;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, bandW * 0.028, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(47,111,237,.22)';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, bandW * 0.013, 0, Math.PI * 2);
+      ctx.fillStyle = '#2f6fed';
+      ctx.fill();
+      ctx.lineWidth = bandW * 0.005;
+      ctx.strokeStyle = 'rgba(255,255,255,.95)';
+      ctx.stroke();
+    }
+
+    return out;
   },
 
   _grabFrame(videoEl){
@@ -226,64 +344,38 @@ const Capture = {
     ctx.closePath();
   },
 
-  /** Photo avant incrustee, sans aucun contour — integration nette. */
+  /** Ombre douce sous une forme arrondie — delimite sans tracer de trait.
+   *  Necessaire quand avant/arriere se ressemblent (ex. un seul capteur
+   *  disponible en test desktop) : sans elle, l'incrustation peut devenir
+   *  invisible a l'oeil si le contenu est proche. */
+  _drawRoundedShadow(ctx, x, y, w, h, r, scale){
+    ctx.save();
+    ctx.shadowColor = 'rgba(15,15,20,.32)';
+    ctx.shadowBlur = scale * 0.022;
+    ctx.shadowOffsetY = scale * 0.006;
+    ctx.fillStyle = '#000';
+    this._roundedRectPath(ctx, x, y, w, h, r);
+    ctx.fill();
+    ctx.restore();
+  },
+
+  /** Photo avant incrustee, sans contour trace — juste une ombre douce
+   *  pour la detacher proprement du fond. */
   _drawPipOverlay(ctx, canvas, frontCanvas){
     const pipW = canvas.width * 0.32;
     const pipH = pipW * (frontCanvas.height / frontCanvas.width);
-    const pad = canvas.width * 0.03;
+    const pad = canvas.width * 0.035;
     const x = canvas.width - pipW - pad;
     const y = pad;
+    const radius = canvas.width * 0.028;
+
+    this._drawRoundedShadow(ctx, x, y, pipW, pipH, radius, canvas.width);
 
     ctx.save();
-    this._roundedRectPath(ctx, x, y, pipW, pipH, canvas.width * 0.028);
+    this._roundedRectPath(ctx, x, y, pipW, pipH, radius);
     ctx.clip();
     ctx.drawImage(frontCanvas, x, y, pipW, pipH);
     ctx.restore();
-  },
-
-  /** Miniature carte + point bleu a l'emplacement GPS exact, sans contour. */
-  _drawMapInset(ctx, canvas, mapCanvas){
-    const size = canvas.width * 0.36;
-    const pad = canvas.width * 0.03;
-    const x = pad;
-    const y = canvas.height - size - pad;
-
-    ctx.save();
-    this._roundedRectPath(ctx, x, y, size, size, canvas.width * 0.028);
-    ctx.clip();
-    ctx.drawImage(mapCanvas, x, y, size, size);
-    ctx.restore();
-
-    // le crop de la carte est toujours centre sur les coordonnees GPS
-    // exactes, donc le point se place au centre de la miniature
-    const cx = x + size / 2;
-    const cy = y + size / 2;
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, size * 0.10, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(47,111,237,.22)';
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, size * 0.045, 0, Math.PI * 2);
-    ctx.fillStyle = '#2f6fed';
-    ctx.fill();
-    ctx.lineWidth = size * 0.018;
-    ctx.strokeStyle = 'rgba(255,255,255,.95)';
-    ctx.stroke();
-  },
-
-  /** Fusionne la miniature carte + point GPS dans une photo deja composee
-   *  (arriere + avant). Retourne un nouveau canvas — image finale unique,
-   *  aucun fichier separe. */
-  composeWithMap(baseCanvas, mapCanvas){
-    const out = document.createElement('canvas');
-    out.width = baseCanvas.width;
-    out.height = baseCanvas.height;
-    const ctx = out.getContext('2d');
-    ctx.drawImage(baseCanvas, 0, 0);
-    this._drawMapInset(ctx, out, mapCanvas);
-    return out;
   },
 
   _composePiP(backCanvas, frontCanvas){
