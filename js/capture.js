@@ -133,7 +133,7 @@ const Capture = {
     const previousStream = this.singleStream;
     previousStream.getTracks().forEach(t => t.stop());
     const nextFacing = previousFacing === 'environment' ? 'user' : 'environment';
-    await this._releaseDelay(300);
+    await this._releaseDelay(200);
 
     try{
       const stream = await this._openStream(nextFacing, false);
@@ -196,7 +196,7 @@ const Capture = {
     const startedOnBack = this.currentFacing === 'environment';
     const firstFrame = this._grabFrame(this.videoMain);
     await this._switchFacing();
-    await new Promise(r => setTimeout(r, 180));
+    await new Promise(r => setTimeout(r, 140));
     const secondFrame = this._grabFrame(this.videoMain);
 
     const back = startedOnBack ? firstFrame : secondFrame;
@@ -323,6 +323,24 @@ const Capture = {
       ctx.stroke();
     }
 
+    // 5. harmonisation : vignettage doux + teinte unifiee sur l'ensemble,
+    // pour que les elements se lisent comme une seule photo plutot que
+    // des calques empiles les uns sur les autres
+    const vignette = ctx.createRadialGradient(
+      out.width / 2, out.height * 0.42, out.width * 0.2,
+      out.width / 2, out.height * 0.5, out.width * 0.85
+    );
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(6,6,10,.16)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, out.width, out.height);
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.fillStyle = 'rgba(255,236,205,.10)';
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.restore();
+
     return out;
   },
 
@@ -350,9 +368,9 @@ const Capture = {
    *  invisible a l'oeil si le contenu est proche. */
   _drawRoundedShadow(ctx, x, y, w, h, r, scale){
     ctx.save();
-    ctx.shadowColor = 'rgba(15,15,20,.32)';
-    ctx.shadowBlur = scale * 0.022;
-    ctx.shadowOffsetY = scale * 0.006;
+    ctx.shadowColor = 'rgba(10,10,16,.24)';
+    ctx.shadowBlur = scale * 0.034;
+    ctx.shadowOffsetY = scale * 0.012;
     ctx.fillStyle = '#000';
     this._roundedRectPath(ctx, x, y, w, h, r);
     ctx.fill();
