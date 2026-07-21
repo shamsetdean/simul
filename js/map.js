@@ -150,6 +150,45 @@ const MapModule = {
   /** Recadrage carre centre sur les coordonnees GPS exactes, pour
    *  l'incrustation directe dans la photo finale (pas de teinte assombrie,
    *  la lisibilite du point GPS prime). */
+  /** Recupere une image de carte centree sur lat/lng, aux dimensions
+   *  pixel exactes demandees (pas de recadrage cote appelant necessaire).
+   *  Pas de teinte assombrissante : priorite a la lisibilite des noms de
+   *  rue quand la carte est fusionnee directement dans la photo. */
+  async fetchCenteredImage(lat, lng, targetW, targetH, zoom = 17){
+    if (!navigator.onLine) return null;
+    try{
+      const centerPx = this._project(lat, lng, zoom);
+      const originX = centerPx.x - targetW / 2;
+      const originY = centerPx.y - targetH / 2;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(targetW);
+      canvas.height = Math.round(targetH);
+      const ctx = canvas.getContext('2d');
+
+      const firstTileX = Math.floor(originX / 256);
+      const firstTileY = Math.floor(originY / 256);
+      const lastTileX = Math.floor((originX + targetW) / 256);
+      const lastTileY = Math.floor((originY + targetH) / 256);
+
+      const loads = [];
+      for (let tx = firstTileX; tx <= lastTileX; tx++){
+        for (let ty = firstTileY; ty <= lastTileY; ty++){
+          const url = `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`;
+          const dx = tx * 256 - originX;
+          const dy = ty * 256 - originY;
+          loads.push(this._loadTile(url).then(img => {
+            if (img) ctx.drawImage(img, dx, dy, 256, 256);
+          }));
+        }
+      }
+      await Promise.all(loads);
+      return canvas;
+    }catch(err){
+      return null;
+    }
+  },
+
   cropToInset(mosaicCanvas, size = 320){
     if (!mosaicCanvas) return null;
     const out = document.createElement('canvas');
