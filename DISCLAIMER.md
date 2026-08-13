@@ -29,4 +29,4 @@ with no commercial affiliation.
 ---
 
 *Copyright (c) 2026 Shams&Dean — Anthropotech Lab*
-*Licence : CC BY-NC-ND 4.0 — https://creativecommons.org/licenses/by-nc-nd/4.0/*
+*Licence : Tous droits réservés.*

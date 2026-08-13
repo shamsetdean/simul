@@ -1,19 +1,75 @@
-Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International (CC BY-NC-ND 4.0)
+Copyright © 2026 Shams Guettaf — Anthropotech Lab
+Projet : simul
+Tous droits réservés.
 
-Copyright (c) 2026 Shams&Dean — Anthropotech Lab
-https://shamsetdean.github.io/anthropotechlab/
+------------------------------------------------------------
+AVERTISSEMENT — DÉPÔT PUBLIC SUR GITHUB
+------------------------------------------------------------
 
-You are free to:
-  Share — copy and redistribute the material in any medium or format.
+Le fait que le code source de ce dépôt soit consultable
+publiquement sur GitHub ne constitue en aucun cas une
+autorisation de reproduction, de modification, de
+distribution ou d'exploitation, en tout ou partie.
 
-Under the following terms:
-  Attribution    — You must give appropriate credit and provide a link to this license.
-  NonCommercial  — You may not use the material for commercial purposes.
-  NoDerivatives  — You may not remix, transform, or build upon the material and distribute it.
+La visibilité publique du code répond uniquement à un usage
+de portfolio et de démonstration technique. Elle n'emporte
+aucune renonciation aux droits d'auteur de son créateur.
 
-No additional restrictions — You may not apply legal terms that legally restrict others
-from doing anything the license permits.
+------------------------------------------------------------
+FONDEMENT JURIDIQUE
+------------------------------------------------------------
 
-Full legal text: https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode
+Cette œuvre (code source, interface, identité visuelle, nom
+du projet, logo et éléments graphiques associés) est protégée
+par le droit d'auteur français, notamment les articles
+L111-1 et suivants du Code de la propriété intellectuelle,
+dès sa création, sans formalité de dépôt.
 
-Third-party libraries included in this project retain their own respective licenses.
+Shams Guettaf est l'auteur et le titulaire exclusif des
+droits patrimoniaux et moraux sur cette œuvre.
+
+------------------------------------------------------------
+CE QUI EST INTERDIT SANS AUTORISATION ÉCRITE PRÉALABLE
+------------------------------------------------------------
+
+- Toute reproduction totale ou partielle du code, du design,
+  de l'identité visuelle ou du concept applicatif
+- Toute modification, adaptation, traduction ou création
+  d'une œuvre dérivée
+- Toute distribution, publication, republication ou mise à
+  disposition de tiers, gratuite ou payante
+- Toute exploitation commerciale, directe ou indirecte
+- Toute réutilisation du nom, du logo ou de l'identité
+  visuelle associée à ce projet
+
+------------------------------------------------------------
+MATURITÉ DU PROJET ET ABSENCE DE GARANTIE
+------------------------------------------------------------
+
+Ce projet fait partie d'un ensemble de réalisations
+personnelles à des degrés d'aboutissement variables :
+certains sont des prototypes, des démonstrations techniques
+ou des travaux en cours, d'autres sont plus finalisés. Aucun
+n'est garanti exempt d'erreurs ni adapté à un usage
+particulier.
+
+Le logiciel est fourni "tel quel", sans garantie d'aucune
+sorte, explicite ou implicite. En aucun cas l'auteur ne
+pourra être tenu responsable de tout dommage direct,
+indirect, accidentel ou consécutif résultant de l'utilisation
+ou de l'impossibilité d'utiliser ce logiciel. Toute
+utilisation se fait aux risques et périls exclusifs de
+l'utilisateur.
+
+------------------------------------------------------------
+CONTACT
+------------------------------------------------------------
+
+Toute demande d'autorisation doit être adressée directement
+à l'auteur : shamsetdean@gmail.com
+
+------------------------------------------------------------
+
+Ce fichier LICENSE ne constitue pas une licence open-source
+au sens usuel du terme (MIT, GPL, Apache, etc.). Il s'agit
+d'une notice de réserve de droits ("all rights reserved").
